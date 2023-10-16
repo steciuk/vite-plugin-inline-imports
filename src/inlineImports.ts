@@ -4,7 +4,7 @@ import { PluginOption } from 'vite';
  * This function returns a Vite plugin that inlines imports based on the provided rules.
  *
  * @param rules An array of objects that define the rules for inlining imports. Each object has the following fields:
- * - `for`: An array of regular expressions that match against the paths to files for which the rule should apply. Keep in mind that the first rule that matches will be used.
+ * - `for`: An array of regular expressions that match against the paths to files for which the rule should apply.
  * - `inline`: An array of regular expressions that are matched against the paths to files that should be inlined for the files specified in `for`.
  * - `recursively` (optional, default: `false`): A boolean that indicates whether to recursively inline imports in the inlined files. If some imports are inlined by plugin, all of their imports will be inlined too.
  * @param inlineTag (optional, default: `___!inline!___`) A string that is used to identify inlined imports. Make sure that it doesn't conflict with any directory or file names.
@@ -83,13 +83,11 @@ function shouldBeInlined(
 	importer: string,
 	inlineRoot: string
 ): boolean {
-	const ruleForInlineRoot = rules.find((rule) => rule.for.some((pattern) => pattern.test(inlineRoot)));
-	if (ruleForInlineRoot?.recursively) {
-		return true;
-	}
+	const rulesForInlineRoot = rules.filter((rule) => rule.for.some((pattern) => pattern.test(inlineRoot)));
+	if (rulesForInlineRoot.some((rule) => rule.recursively)) return true;
 
-	const rule = rules.find((rule) => rule.for.some((pattern) => pattern.test(importer)));
-	if (!rule) return false;
+	const matchingRules = rules.filter((rule) => rule.for.some((pattern) => pattern.test(importer)));
+	if (matchingRules.length === 0) return false;
 
-	return rule.inline.some((pattern) => pattern.test(resolvedId));
+	return matchingRules.some((rule) => rule.inline.some((pattern) => pattern.test(resolvedId)));
 }

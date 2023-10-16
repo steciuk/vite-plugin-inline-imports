@@ -117,3 +117,29 @@ test('Inlining parent with recursive flag inlines all its children', async () =>
 	expect(generatedFiles).toContain('shared.js');
 	expect(generatedFiles).toContain('shared2.js');
 });
+
+test('If any of the rules dictates that the file should be inlined, it is inlined', async () => {
+	const bundle = await build(
+		mergeConfig(commonConfig, {
+			plugins: [
+				inlineImports({
+					rules: [
+						{
+							for: [/multiEntry\/entry1.ts/],
+							inline: [],
+						},
+						{
+							for: [/multiEntry\/entry1.ts/],
+							inline: [/multiEntry\/shared.ts/, /multiEntry\/shared2.ts/],
+							recursively: true,
+						},
+					],
+				}),
+			],
+		})
+	);
+
+	const output = (bundle as any).output;
+	const entry1Code = output.find((file: any) => file.fileName === 'entry1.js').code;
+	expect(entry1Code).not.toContain('import');
+});
