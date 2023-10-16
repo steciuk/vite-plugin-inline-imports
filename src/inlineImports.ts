@@ -4,45 +4,52 @@ export function inlineImports({
 	rules = [],
 	inlineTag = '___!inline!___',
 }: {
-	rules: {
-		for: RegExp[];
-		inline: RegExp[];
-	}[];
+	rules: InlineImportsRule[];
 	inlineTag?: string;
 }): PluginOption {
-	// ---------------
-	const modulesToInline = ['asdsf'];
-	console.log(rules);
-	// ---------------
-
 	const codeMap = new Map<string, string>();
 
 	return {
 		name: 'vite-plugin-inline-imports',
 		enforce: 'pre',
 		async resolveId(source, importer, options) {
-			if (!modulesToInline.some((module) => source.includes(module))) return;
+			// Entry file, no need to inline
+			if (!importer || options.isEntry) return;
 
-			const resolution = await this.resolve(source, importer, {
+			let inlineRoot = '';
+			let realImporter = importer;
+			if (importer.includes(inlineTag)) {
+				realImporter = importer.split(inlineTag)[2];
+				inlineRoot = importer.split(inlineTag)[1];
+			}
+
+			const resolution = await this.resolve(source, realImporter, {
 				skipSelf: true,
 				...options,
 			});
-			if (!resolution) return;
+			// Failed to resolve or external module
+			if (!resolution || resolution.external) return;
 
-			const code = await this.load({ id: resolution.id });
-			if (!code.code) return;
-			codeMap.set(resolution.id, code.code);
+			if (shouldBeInlined(rules, resolution.id, realImporter, inlineRoot)) {
+				const code = await this.load({ id: resolution.id });
+				inlineRoot = inlineRoot ? inlineRoot : realImporter;
+				// Failed to load file contents
+				if (!code.code) return;
+				const fakeId = `${randomVarName()}${inlineTag}${inlineRoot}${inlineTag}${resolution.id}`;
+				codeMap.set(fakeId, code.code);
 
-			return { id: `${randomVarName()}${inlineTag}${resolution.id}` };
+				return { id: fakeId };
+			}
+
+			// If importer is inlined, it means we provided fake id for it
+			// and vite won't resolve any of its imports, so we have to
+			// return the real id of all it's children if they aren't inlined
+			if (inlineRoot !== '') {
+				return { id: resolution.id };
+			}
 		},
 		load(id) {
-			if (id.includes(inlineTag)) {
-				const realId = id.split(inlineTag)[1];
-				const code = codeMap.get(realId);
-				if (!code) return;
-
-				return code;
-			}
+			return codeMap.get(id);
 		},
 	};
 }
@@ -52,3 +59,27 @@ export type InlineImportsOptions = Parameters<typeof inlineImports>[0];
 function randomVarName(): string {
 	return `var${Math.random().toString().slice(2)}`;
 }
+
+function shouldBeInlined(
+	rules: InlineImportsRule[],
+	resolvedId: string,
+	importer: string,
+	inlineRoot: string
+): boolean {
+	const ruleForInlineRoot = rules.find((rule) => rule.for.some((pattern) => pattern.test(inlineRoot)));
+	if (ruleForInlineRoot?.recursively) {
+		return true;
+	}
+
+	const rule = rules.find((rule) => rule.for.some((pattern) => pattern.test(importer)));
+	if (!rule) return false;
+
+	return rule.inline.some((pattern) => pattern.test(resolvedId));
+}
+
+// TODO: change RegExp to glob patterns
+type InlineImportsRule = {
+	for: RegExp[];
+	inline: RegExp[];
+	recursively?: boolean;
+};

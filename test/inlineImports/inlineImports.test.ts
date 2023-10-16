@@ -1,28 +1,119 @@
 import path from 'path';
 import { inlineImports } from 'src/inlineImports';
-import { build } from 'vite';
-import { test } from 'vitest';
+import { build, mergeConfig } from 'vite';
+import { expect, test } from 'vitest';
 
-test(
-	'inlineImports',
-	async () => {
-		const bundle = await build({
-			plugins: [inlineImports({ rules: [] })],
-			build: {
-				outDir: path.resolve(__dirname, './multiEntry/dist'),
-				rollupOptions: {
-					input: {
-						entry1: path.resolve(__dirname, './multiEntry/entry1.ts'),
-						entry2: path.resolve(__dirname, './multiEntry/entry2.ts'),
-					},
-				},
+const commonConfig = {
+	configFile: false,
+	logLevel: 'silent',
+	build: {
+		minify: false,
+		// outDir: path.resolve(__dirname, './dist'),
+		outDir: undefined,
+		rollupOptions: {
+			input: {
+				entry1: path.resolve(__dirname, './multiEntry/entry1.ts'),
+				entry2: path.resolve(__dirname, './multiEntry/entry2.ts'),
+				entry3: path.resolve(__dirname, './multiEntry/entry3.ts'),
 			},
-		});
-
-		console.log('bundle!!!!');
-		console.log(bundle);
-
-		// expect(bundle).not.toContain('___!inline!___');
+			output: {
+				entryFileNames: '[name].js',
+				chunkFileNames: '[name].js',
+				assetFileNames: '[name].js',
+				minifyInternalExports: false,
+			},
+		},
 	},
-	{ timeout: 100000 }
-);
+};
+
+test("Inlining imports with empty rules doesn't interfere with normal chunkification", async () => {
+	const bundle = await build(
+		mergeConfig(commonConfig, {
+			plugins: [
+				inlineImports({
+					rules: [
+						{
+							for: [],
+							inline: [],
+						},
+					],
+				}),
+			],
+		})
+	);
+
+	const output = (bundle as any).output;
+	expect(output.length).toBe(3 + 1);
+	const generatedFiles = output.map((file: any) => file.fileName);
+	expect(generatedFiles).toContain('entry1.js');
+	expect(generatedFiles).toContain('entry2.js');
+	expect(generatedFiles).toContain('entry3.js');
+	expect(generatedFiles).toContain('shared.js');
+});
+
+test("Inlining import for one entry doesn't change chunkification for the rest", async () => {
+	const bundle = await build(
+		mergeConfig(commonConfig, {
+			plugins: [
+				inlineImports({
+					rules: [
+						{
+							for: [/multiEntry\/entry1.ts/],
+							inline: [/multiEntry\/shared2.ts/, /multiEntry\/shared.ts/],
+						},
+					],
+				}),
+			],
+		})
+	);
+
+	const output = (bundle as any).output;
+	expect(output.length).toBe(3 + 2);
+
+	const entry1Code = output.find((file: any) => file.fileName === 'entry1.js').code;
+	expect(entry1Code).not.toContain('from "./shared.js"');
+
+	const generatedFiles = output.map((file: any) => file.fileName);
+	expect(generatedFiles).toContain('entry1.js');
+	expect(generatedFiles).toContain('entry2.js');
+	expect(generatedFiles).toContain('entry3.js');
+	expect(generatedFiles).toContain('shared.js');
+	expect(generatedFiles).toContain('shared2.js');
+});
+
+test('Inlining parent with recursive flag inlines all its children', async () => {
+	const bundle = await build(
+		mergeConfig(commonConfig, {
+			plugins: [
+				inlineImports({
+					rules: [
+						{
+							for: [/multiEntry\/entry1.ts/],
+							inline: [/multiEntry\/shared.ts/],
+							recursively: true,
+						},
+					],
+				}),
+			],
+		})
+	);
+
+	const output = (bundle as any).output;
+	expect(output.length).toBe(3 + 2);
+
+	const entry1Code = output.find((file: any) => file.fileName === 'entry1.js').code;
+	expect(entry1Code).not.toContain(`function shared2() {
+    console.log("shared2");
+  }
+  function shared() {
+    console.log("shared");
+    shared2();
+  }`);
+
+	const generatedFiles = output.map((file: any) => file.fileName);
+	expect(generatedFiles).toContain('entry1.js');
+	expect(generatedFiles).toContain('entry2.js');
+	expect(generatedFiles).toContain('entry3.js');
+	expect(generatedFiles).toContain('shared.js');
+	expect(generatedFiles).toContain('shared2.js');
+});
