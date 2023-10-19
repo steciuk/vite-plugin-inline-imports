@@ -7,7 +7,13 @@ Created in order to:
 - solve issues the original plugin had with building the project in 'watch' mode,
 - allow for more control over the plugin's behavior.
 
+**⚠️ Keep in mind that this plugin is still in early development and may not work as expected.**
+
 ## Usage
+
+```
+npm install --save-dev vite-plugin-inline-imports
+```
 
 ```ts
 import { inlineImports } from 'vite-plugin-inline-imports'
@@ -18,7 +24,7 @@ export default defineConfig{
     inlineImports({
       rules: [
         {
-          for: [/regexes matching importers/]
+          for: [/regex matching importers/]
           inline: [/regex matching imports/]
           recursively: false // optional
         }
