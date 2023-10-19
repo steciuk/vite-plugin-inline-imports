@@ -24,8 +24,8 @@ export default defineConfig{
     inlineImports({
       rules: [
         {
-          for: [/regex matching importers/]
-          inline: [/regex matching imports/]
+          for: [/regex matching importers/],
+          inline: [/regex matching imports/],
           recursively: false // optional
         }
       ],
@@ -54,11 +54,11 @@ export default defineConfig{
     inlineImports({
       rules: [
         {
-          for: [/entry\//]
+          for: [/entry\//],
           inline: [/consts\//]
         },
         {
-          for: [/entry\/entry1\.ts$/]
+          for: [/entry\/entry1\.ts$/],
           inline: [/utils\//],
           recursively: true
         }
