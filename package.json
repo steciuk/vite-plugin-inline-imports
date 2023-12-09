@@ -1,6 +1,6 @@
 {
 	"name": "vite-plugin-inline-imports",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"description": "Vite plugin to inline imports",
 	"author": "Adam Steciuk",
 	"license": "MIT",
